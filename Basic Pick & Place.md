@@ -11,15 +11,15 @@ $^Wp^A=p^A$ is the position of A relative to the World origin.
 When looking at a coordinate frame, x-axis will always be colored red, y-axis colored green, and z-axis colored blue. Now, given a coordinate frame,
 
 $^Bp^A_C$ is the position of A relative to B, a vector in coordinate frame C. Written as P_BA_C in code.
-$^Cp^A= ^Cp^A_C=$ is the position of A relative to the origin of coordinate frame C.
+When the reference is the same as the frame, we can omit the frame notation and simply write $^Cp^A= ^Cp^A_C$ which is the position of A relative to the origin of coordinate frame C.
 
 Let $R$ denote a rotation. Similar to position, we have
 
-$^BR^A$ as the rotation of frame A relative to frame B.
+$^BR^A$ as the rotation of frame A relative to frame B. Note that rotations don't have an "expressed in" frame.
 
 Let $X$ denote a transform, which consists of a translation and rotation. Then
 
-$^BX^A$ is the pose/transform of frame A relative to frame B. We can also express this as ($^Bp^A_B,^BR^A$)
+$^BX^A$ is the pose/transform of frame A relative to frame B. We can also express this as ($^Bp^A_B,^BR^A$). In Drake, we use ```RigidTransform``` to represent a pose/transform.
 
 Let's go through an example.
 ![[Pasted image 20250910161335.png]]
@@ -27,7 +27,6 @@ We are being asked for the position of the object relative to the gripper. The o
 
 ![[Pasted image 20250910161818.png]]
 We switch the coordinate from to the O frame. Note that we are looking at the same vector, just expressed in a different frame. Relative to the O frame, we have a negative z-component, so the only reasonable answer is (a).
-
 ### Spatial Algebra
 ---
 We can add two positions in the same frame as follows:
@@ -49,6 +48,10 @@ $$
 The inverse of multiplication is also well defined.
 $$
 [^AR^B]^{-1}=[^BR^A]
+$$
+When the rotation is represented as a rotation matrix, the inverse is just the matrix inverse. Since rotation matrices are orthonormal, we also have
+$$
+R^{-1}=R^T
 $$
 Finally, transforms compose
 $$
@@ -85,7 +88,7 @@ The direction of the arrows represents the direction of a positive rotation.
 
 Note that composing rotation matrices is order-dependent (i.e. $XY\neq YX$). This is a problem because when we talk about rotating about an axis, are we talking about the original axis or the new one? There is the extrinsic convention in which we are rotating about the original xyz axes and the intrinsic convention that we are rotating about the new frame we ended up with. This is the problem with euler angles.
 
-Roll, pitch, and yaw use the extrinsic convention and is commonly used in URDF files. 
+Rotations around the x, y, and z axes (roll, pitch, and yaw, respectively) use the extrinsic convention and is commonly used in URDF files. 
 
 An issue with the rotation matrix is that it has many numbers to represent and has no singularities (also is unique), an issue with the euler angles is that it only has three numbers with some rotation but some rotations have infinite representations. 
 #### Axis Angle Representation
@@ -107,6 +110,7 @@ A singularity here is that when the angle starts getting small, then we start lo
 
 It is not possible to have no singularities with only three numbers
 #### Quaternions
+---
 A quaternion is represented by
 $$
 q=\begin{bmatrix}
@@ -155,6 +159,22 @@ $$
 When we multiply this through, we notice that the transformation rotates $v$ and adds $d$, thus making it a proper transform. 
 
 ## Lecture 4 - Kinematics
+### Forward Kinematics
+---
+We typically have the joint positions of a robot. To go from joint positions to cartesian frames, we use forward kinematics. 
+
+The joint positions of a robot is given by a vector $q$. The goal of forward kinematics is to produce a map
+$$
+X^G=f^G_{kin}(q)
+$$
+In Drake, every ```Joint``` has a few position variables and knows how to compute the configuration-dependent transforms across the joint from the child joint frame $J_C$ to the parent joint frame $J_P$. In other words, it knows
+$$
+^{J_P}X^{J_C}(q)
+$$
+Moreover, the kinematic tree defines the fixed transforms from the joint frame to the child body frame $^CX^{J_C}$, and from the joint frame to the parent frame $^PX^{J_P}$. Using these, we can compute the configuration transform between any body and its parent
+$$
+^PX^C(q)=[^PX^{J_P}][^{J_P}X^{J_C}(q)][^{J_P}X^C]
+$$
 
 ### Inverse Kinematics
 ---
@@ -169,6 +189,7 @@ Numerical Solution - Given initial guess at configuration, do e.g. numerical roo
 iiwa robot has seven degrees of freedom, so there are infinitely many solutions to the inverse kinematics
 
 ### Differential Kinematics
+---
 We want to go from joint positions, velocities $\to$ spatial velocity
 $$
 q,v\to V^B$$
@@ -176,20 +197,26 @@ We have
 $$
 X^B = f^B_{kin}(q)
 $$
-which implies that
-$$
-dX^B=\frac{df^B_{kin}(q)}{dq}dq=J^B(q)dq
-$$
+which implies that the change in pose is given by
+$$dX^B=\frac{\partial f^B_{kin}(q)}{\partial q}dq=J^B(q)dq$$
 where $J^B(q)$ is the kinematic Jacobian. The $B$ superscript indicates which frame we are in.
-
+### Differential Inverse Kinematics
+---
+The geometric Jacobian provides a linear relationship between generalized velocity and spatial velocity.
+$$
+V^G=J^G(q)v
+$$
 ### Spatial Velocity
-The spatial velocity is defined by an angular velocity $^A\omega^B_C$ and a translational velocity $^Av^B_C$.
+---
+The spatial velocity (also known as twist) is defined by an angular velocity $^A\omega^B_C\in\mathbb{R}^3$ and a translational velocity $^Av^B_C\in\mathbb{R}^3$.
 $$
 \frac{d}{dt}[^AX^B_C]=[^AV^B_C]=\begin{bmatrix}
 ^A\omega^B_C\\
 ^Av^B_C
 \end{bmatrix}
 $$
+The angular velocity is a 3D vector $\begin{bmatrix}w_x & w_y & w_z\end{bmatrix}$ with $\left\lVert ^A\omega^B_C\right\rVert$ being the angular speed and direction being the (instantaneous) axis of rotation. 
+
 Just like with spatial algebra, we also have spatial velocity algebra. 
 
 Rotations can be used to change between the "expressed-in" frames.
@@ -207,12 +234,16 @@ We also have the additive inverse
 $$
 ^A\omega^C_F=-^C\omega^A_F
 $$
-Composition of translational velocities is 
+We compose translational velocities by
 $$
-TODO ADD THE REST
+^Av^C_F=[^Av^B_F]+[^Bv^C_F]+[^A\omega^B_F]\times[^Bp^C_F]
 $$
-
+and its additive inverse is
+$$
+-^Av^B_F=[^Bv^A_F]+[^A\omega^B_F]\times[^Bp^A_F]
+$$
 ### Jacobian
+---
 Analytic Jacobians relate joint velocities to derivatives of pose parameters.
 
 Geometric Jacobian relates joint velocities to spatial velocity.
@@ -233,6 +264,18 @@ $$
  & 0 &  &\vert & I
 \end{bmatrix}
 $$
-The analytic Jacobian may have a different size than the geometric Jacobian and may have difference reference points. 
+The analytic Jacobian may have a different size than the geometric Jacobian and may have different reference points. 
 
-$\textbf{Note:}$ We are interested in the inverse of the Jacobian, but this matrix may be nonsquare or singular, so it may not always have an inverse. Thus, we employ a "pseudo-inverse." If the matrix is full rank (aka we have an inverse), then we get a unique answer (the true inverse). If we have too few degrees of freedom (under full rank), then we get the least squares solution, the velocity that gets us "near" the one that we want. If we have too many degrees of freedom (redundant), now there are infinitely many joint velocities that produce a given joint velocity which leads us to the minimal norm solution (smallest quadratic norm solution).
+$\textbf{Note:}$ We are interested in the inverse of the Jacobian, but this matrix may be nonsquare or singular, so it may not always have an inverse. Thus, we employ a "pseudo-inverse." 
+#### Jacobian pseudo-inverse
+---
+Spatial velocity has six components. The gripper frame is welded on the last link of the iiwa, which has seven positions. Thus,
+$$
+J^G(q_{iiwa})\in\mathbb{R}^{6\times7}
+$$
+It does not have an inverse because it is not a square matrix. However, having more degrees of freedom than the spatial velocity requires (more columns than rows) gives us many solutions for $v$ to produce the desired spatial velocity. To choose the minimum-norm solution, we employ the Moore-Penrose pseudo-inverse, given by $J^+$.
+$$
+v=[J^G(q)]^+V^{G_d}
+$$
+If the matrix is full rank (aka we have an inverse), then we get a unique answer (the true inverse). If we have too few degrees of freedom (under full rank), then we get the least squares solution, the velocity that gets us "near" the one that we want. If we have too many degrees of freedom (redundant), now there are infinitely many joint velocities that produce a given joint velocity which leads us to the minimal norm solution (smallest quadratic norm solution).
+
